@@ -1,14 +1,10 @@
 package embedding;
 
 
+import org.deeplearning4j.graph.api.Edge;
 import org.deeplearning4j.graph.api.NoEdgeHandling;
 import org.deeplearning4j.graph.api.Vertex;
 import org.deeplearning4j.graph.models.deepwalk.DeepWalk;
-import org.deeplearning4j.graph.models.deepwalk.GraphHuffman;
-import org.deeplearning4j.graph.models.embeddings.InMemoryGraphLookupTable;
-import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.deeplearning4j.graph.iterator.GraphWalkIterator;
-import org.deeplearning4j.graph.iterator.RandomWalkIterator;
 import org.neo4j.graphalgo.api.Graph;
 import org.neo4j.graphalgo.api.GraphFactory;
 import org.neo4j.graphalgo.core.GraphLoader;
@@ -25,9 +21,11 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.logging.Log;
 import org.neo4j.procedure.*;
 import org.neo4j.values.storable.DeepWalkPropertyTranslator;
-import org.neo4j.values.storable.LookupTablePropertyTranslator;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -113,25 +111,17 @@ public class DeepWalkProc {
 
     private org.deeplearning4j.graph.graph.Graph<Integer, Integer> buildDl4jGraph(Graph graph) {
         List<Vertex<Integer>> nodes = new ArrayList<>();
-
-        PrimitiveIntIterator nodeIterator = graph.nodeIterator();
-        while(nodeIterator.hasNext()) {
-            int nodeId = nodeIterator.next();
-            nodes.add(new Vertex<>(nodeId,nodeId));
-        }
-
-        boolean allowMultipleEdges = true;
-
-        org.deeplearning4j.graph.graph.Graph<Integer, Integer> iGraph = new org.deeplearning4j.graph.graph.Graph<>(nodes, allowMultipleEdges);
-
-        nodeIterator = graph.nodeIterator();
-        while(nodeIterator.hasNext()) {
-            int nodeId = nodeIterator.next();
-            graph.forEachRelationship(nodeId, Direction.BOTH, (sourceNodeId, targetNodeId, relationId) -> {
-                iGraph.addEdge(nodeId, targetNodeId, -1, false);
-                return false;
+        List<Edge<Integer>> edges = new ArrayList<>();
+        graph.forEachNode((nodeId) -> {
+            nodes.add(new Vertex(nodeId, nodeId));
+            graph.forEachRelationship(nodeId, Direction.OUTGOING, (s, t, ignored) -> {
+                edges.add(new Edge<>(s, t, -1, false));
+                return true;
             });
-        }
+            return true;
+        });
+        org.deeplearning4j.graph.graph.Graph<Integer, Integer> iGraph = new org.deeplearning4j.graph.graph.Graph<>(nodes, true);
+        edges.forEach(iGraph::addEdge);
         return iGraph;
     }
 
